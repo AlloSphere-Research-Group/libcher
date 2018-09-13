@@ -4,15 +4,14 @@
 #include <vector>
 #include <string>
 #include <sstream>
-#include <iostream>
-#include <memory>
-#include <cstdlib>
 #include <mutex>
 
 namespace zmq {
     class context_t;
     class socket_t;
 }
+
+#include "nodeio.hpp"
 
 namespace datk {
 
@@ -36,7 +35,7 @@ typedef enum {
 /**
  * @brief The NodeProcess class
  */
-class NodeProcess
+class NodeProcess :public NodeIO
 {
 public:
     NodeProcess();
@@ -72,16 +71,23 @@ public:
     bool verbose() {return mVerbose;}
 
     int rank() { return mRank; }
+protected:
+    bool sendToController(std::string &data, bool exceptionOnFail = false);
 private:
-    int mRank {0};
+    int64_t mPid{ 0 };
     Role mRole {DESKTOP};
-    int mGroup {0};
+    int mGroup {-1};
     int mPort{ 0 };
     bool mVerbose {true};
+
+    uint64_t mMessageCount{ 0 };
+
     std::vector<NodeDetails> mNodes;
     std::mutex mNodesLock;
-    zmq::context_t *mContext{ nullptr };
-    zmq::socket_t *mSocket{ nullptr };
+    std::shared_ptr<zmq::context_t> mContext;
+    std::shared_ptr<zmq::socket_t> mSocket;
+
+    std::shared_ptr<zmq::socket_t> mServerSocket;
 };
 
 } // namespace datk

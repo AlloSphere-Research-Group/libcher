@@ -9,9 +9,9 @@ import os
 
 nodes = []
 
-filenames = ["src/%s.cpp"%name for name in ["simulator", "graphics", "control", "audio"] ]
+#filenames = ["src/%s.cpp"%name for name in ["simulator", "graphics", "control", "audio"] ]
 
-node = appnode.BuildNode('local', False)
+node = appnode.BuildNode('local', 2)
 
 configuration = {"project_dir" : "C:/Users/User/source/repos/libdatk/examples/simpleTest"  }
 node.configure(**configuration)

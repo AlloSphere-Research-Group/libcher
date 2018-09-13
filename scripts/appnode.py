@@ -16,6 +16,7 @@ from subprocess import TimeoutExpired
 import os
 import sys
 from time import sleep
+from collections import namedtuple
 
 
 from threading  import Thread
@@ -24,7 +25,7 @@ try:
 except ImportError:
     from queue import Queue # python 3.x
 
-
+NodeInfo = namedtuple("NodeInfo", ("hostname", "port", "role", "rank", "group"))
 ON_POSIX = 'posix' in sys.builtin_module_names
 
 def enqueue_output(out, queue):
@@ -96,7 +97,7 @@ def build_thread_func(builder):
         builder._debug_print("Command set done.")
     builder._debug_print("Builder Thread done")
 
-def run_thread_func(runner, run_command_lists):
+def run_thread_func(runner, run_command_lists, environ_vars):
     rank = runner.rank
     for run_command in run_command_lists:
         if runner.remote:
@@ -117,8 +118,7 @@ def run_thread_func(runner, run_command_lists):
         
 #        runner.internal_process.stdin.write(run_command.encode() + b'\n')
         
-        environ = "set AL_WORLD='localhost,5555,1,0,0,localhost,5556,1,1,0,localhost,5557,1,2,0'"
-        environ += " & set AL_RANK=" + str(rank)
+        environ = ' & '.join(["set %s=%s"%(key,value) for key,value in environ_vars.items()])
 #        environ = "set AL_RANK=" + str(rank)
         os.system(environ + " & " + run_command)
 #        runner.internal_process = subprocess.Popen(run_command,
@@ -235,6 +235,10 @@ class BuildNode(Node):
 
     def set_debug(self, debug_ = True):
         self.debug = debug_
+    
+    def get_run_nodes(self):
+        pass
+        
 
     def build(self):
         # Execute pre-build commands
@@ -325,7 +329,7 @@ class RemoteBuildNode(BuildNode):
         self.remote = True
 
 class RunNode(Node):
-    def __init__(self, name = 'node', rank = 0):
+    def __init__(self, name = 'node', rank = 0, world = {}):
         Node.__init__(self)
 
         self.name = name
@@ -346,8 +350,23 @@ class RunNode(Node):
             command_list = [command]
         else:
             command_list = command
-
-        self.thread = Thread(target=run_thread_func, args=(self, command_list))
+            
+        print("Running : "+ " ".join(command_list))
+        environ_vars = {}
+        world_list = ''
+        world = {} 
+        world['run_nodes'] = [NodeInfo('localhost',5555,1,0,0),
+             NodeInfo('localhost',5556,1,1,0),
+             NodeInfo('localhost',5557,1,2,0)]
+        'localhost,5555,1,0,0,localhost,5556,1,1,0,localhost,5557,1,2,0'
+        for node in world['run_nodes']:
+            world_list += ','.join([str(member) for member in node])
+            world_list += ','
+        
+        environ_vars ["AL_WORLD"] = world_list
+        environ_vars["AL_RANK"] = str(self.rank)
+        
+        self.thread = Thread(target=run_thread_func, args=(self, command_list, environ_vars))
         self.thread.daemon = True # thread dies with the program
         self.thread.start()
 

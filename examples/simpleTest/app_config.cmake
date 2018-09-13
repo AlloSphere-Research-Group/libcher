@@ -1,6 +1,7 @@
 # allolib location
 set(allolib_directory ../../../allolib)
 
+set(BUILD_EXAMPLES 0)
 add_subdirectory(../../../libdatk ../../../libdatk/build) 
 
 # list your app files here

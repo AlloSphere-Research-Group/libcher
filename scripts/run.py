@@ -9,7 +9,9 @@ from __future__ import print_function
 import sys, os
 import argparse
 
-from appnode import BuildNode, RemoteBuildNode, RunNode, RemoteRunNode
+from appnode import BuildNode, RemoteBuildNode, RunNode, RemoteRunNode, NodeInfo
+
+import pyzmq as zmq
 
 class AlloRunner():
     def __init__(self, nodes, project_src, verbose = True, debug = False):
@@ -39,6 +41,7 @@ class AlloRunner():
 
         self.displays = ["STDOUT", "STDERR"]
         self.current_display = 0
+        self.world = {}
         pass
 
     def log(self, text):
@@ -52,7 +55,7 @@ class AlloRunner():
         if (self._run_builders()) :
             self._start_runners()
         else:
-            self.log("Building aborted.")
+            self.log("Building failed.")
 
     def _run_builders(self):
         self.builders = []
@@ -74,7 +77,6 @@ class AlloRunner():
             builder.set_debug(self.debug)
             self.builders.append(builder)
             builder.build()
-
         done = True
         self.log("Start build")
         for b in self.builders:
@@ -110,12 +112,36 @@ class AlloRunner():
         self.log("Building done  ---- ")
 
         return True
+    
+    
+    def _bootstrap(self):
+        
+        root_found = False
+        for runner in self.runners:
+            if runner.rank == 0:
+                root_found = True
+                break
+        
+        if not root_found:
+            raise ValueError("No root node.")
+        
+        port = "5556"
+        context = zmq.Context()
+        socket = context.socket(zmq.PAIR)
+        while not socket.bind("tcp://*:%s" % port):
+            port = port + 1
+        
+        socket.send(b"Server message to client3")
+        msg = socket.recv()
 
     def _start_runners(self):
         self.stdoutbuf  = []
         self.stderrbuf = []
         self.runners = []
         rank = 0
+        
+        self._bootstrap()
+
         for i, node in enumerate(self.nodes):
             for app in node.get_products():
                 for deploy_host in node.deploy_to:
@@ -127,10 +153,15 @@ class AlloRunner():
                         runner = RunNode(deploy_host + '-' + app, rank)
                     bin_path = 'bin\\' + app
                     runner.configure(node.project_dir, bin_path)
-                    runner.run()
                     self.runners.append(runner)
                     rank = rank + 1
         done = False
+        
+        self._bootstrap()
+        # Run all other nodes
+        for runner in self.runners:
+            if not runner.rank == 0:
+                runner.run()
 
         while not done:
             for i in range(len(self.runners)):
